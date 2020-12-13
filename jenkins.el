@@ -343,19 +343,47 @@
   (interactive)
   (browse-url (format "%s/job/%s/" (get-jenkins-url) jobname)))
 
+;; INFO: Is relatively straightforward to implement via deferring just the last
+;; step (console output retrieval). However, since previous steps such as
+;; `jenkins--retrieve-page-as-json' make use of `url-retrieve-synchronously'
+;; and use the result all along the code, everything would need to be deferred
+;; and rewritten, and that is simply non-viable.
+;; Even with `async', a sentinel-based approach would be used and all the
+;; pending code on the call stack would be executed before the callback
+;; function, and this code actually depends on the result of the first
+;; `url-retrieve', so there is no easy option...
+
+;; Conditionally set compilation regexp parsing of Jenkins console output buffers
+(defvar larumbe/jenkins-compilation-parse-console-output t)
+
 (defun jenkins-get-console-output (jobname build)
-  "Show the console output for the current job"
+  "Show the console output for the current job."
   (let ((url-request-extra-headers (jenkins--get-auth-headers))
         (console-buffer (get-buffer-create (format "*jenkins-console-%s-%s*" jobname build)))
         (url (format "%sjob/%s/%s/consoleText" (get-jenkins-url) jobname build)))
-    (with-current-buffer console-buffer
-      (read-only-mode -1)    ; make sure buffer is writable
-      (erase-buffer)
-      (with-current-buffer (url-retrieve-synchronously url)
-
-        (copy-to-buffer console-buffer (point-min) (point-max))))
-    (pop-to-buffer console-buffer)
-    (jenkins-console-output-mode)))
+    (switch-to-buffer console-buffer)
+    ;; Retrieve output only if it wasn't fetched before
+    (when (equal (buffer-size console-buffer) 0)
+      (with-current-buffer console-buffer
+        (setq buffer-read-only nil)
+        (erase-buffer)
+        (insert "Loading console output asynchronously...\n")
+        (when larumbe/jenkins-compilation-parse-console-output
+          (compilation-mode)
+          (larumbe/scons-error-regexp-set-emacs)))
+      (deferred:$
+        (deferred:url-retrieve url)
+        (deferred:nextc it
+          (lambda (buf)
+            (with-current-buffer console-buffer
+              (setq buffer-read-only nil)
+              (erase-buffer))
+            (with-current-buffer buf
+              (append-to-buffer console-buffer (point-min) (point-max))
+              (message "Jenkins job retrieved successfully. Waiting for regexp parsing...")
+              (pop-to-buffer console-buffer)
+              (setq truncate-lines t)
+              (setq buffer-read-only t))))))))
 
 (defun jenkins--visit-job-from-main-screen ()
   "Open browser for current job."
