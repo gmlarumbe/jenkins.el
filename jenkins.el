@@ -370,7 +370,7 @@
         (insert "Loading console output asynchronously...\n")
         (when larumbe/jenkins-compilation-parse-console-output
           (compilation-mode)
-          (larumbe/scons-error-regexp-set-emacs)))
+          (larumbe/compilation-error-re-set "scons")))
       (deferred:$
         (deferred:url-retrieve url)
         (deferred:nextc it
