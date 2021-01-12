@@ -355,12 +355,14 @@
 
 ;; Conditionally set compilation regexp parsing of Jenkins console output buffers
 (defvar larumbe/jenkins-compilation-parse-console-output t)
+;; Defer fails to find `console-buffer' lexical binding
+(defvar larumbe/jenkins-compilation-console-buffer nil)
 
 (defun jenkins-get-console-output (jobname build)
   "Show the console output for the current job."
-  (let ((url-request-extra-headers (jenkins--get-auth-headers))
-        (console-buffer (get-buffer-create (format "*jenkins-console-%s-%s*" jobname build)))
-        (url (format "%sjob/%s/%s/consoleText" (get-jenkins-url) jobname build)))
+  (let* ((url-request-extra-headers (jenkins--get-auth-headers))
+         (console-buffer (get-buffer-create (format "*jenkins-console-%s-%s*" jobname build)))
+         (url (format "%sjob/%s/%s/consoleText" (get-jenkins-url) jobname build)))
     (switch-to-buffer console-buffer)
     ;; Retrieve output only if it wasn't fetched before
     (when (equal (buffer-size console-buffer) 0)
@@ -371,17 +373,19 @@
         (when larumbe/jenkins-compilation-parse-console-output
           (compilation-mode)
           (larumbe/compilation-error-re-set "scons")))
+      ;; Defer fails to find `console-buffer' lexical binding
+      (setq larumbe/jenkins-compilation-console-buffer console-buffer)
       (deferred:$
         (deferred:url-retrieve url)
         (deferred:nextc it
           (lambda (buf)
-            (with-current-buffer console-buffer
+            (with-current-buffer larumbe/jenkins-compilation-console-buffer
               (setq buffer-read-only nil)
               (erase-buffer))
             (with-current-buffer buf
-              (append-to-buffer console-buffer (point-min) (point-max))
+              (append-to-buffer larumbe/jenkins-compilation-console-buffer (point-min) (point-max))
               (message "Jenkins job retrieved successfully. Waiting for regexp parsing...")
-              (pop-to-buffer console-buffer)
+              (pop-to-buffer larumbe/jenkins-compilation-console-buffer)
               (setq truncate-lines t)
               (setq buffer-read-only t))))))))
 
