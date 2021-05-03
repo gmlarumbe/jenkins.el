@@ -34,6 +34,7 @@
 (require 'cl-lib)
 (require 'dash)
 (require 'json)
+(require 'deferred)
 
 (defconst jenkins-buffer-name
   "*jenkins: status*"
@@ -384,7 +385,8 @@
               (erase-buffer))
             (with-current-buffer buf
               (append-to-buffer larumbe/jenkins-compilation-console-buffer (point-min) (point-max))
-              (message "Jenkins job retrieved successfully. Waiting for regexp parsing...")
+              (when larumbe/jenkins-compilation-parse-console-output
+                (message "Jenkins job retrieved successfully. Waiting for regexp parsing..."))
               (pop-to-buffer larumbe/jenkins-compilation-console-buffer)
               (setq truncate-lines t)
               (setq buffer-read-only t))))))))
